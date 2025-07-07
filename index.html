@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html ng-app="DiagnosisApp">
+<head>
+    <title>Advanced Medical Diagnosis</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome for Icons -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <!-- AngularJS -->
+    <script src="https://ajax.googleapis.com/ajax/libs/angularjs/1.8.2/angular.min.js"></script>
+    <style>
+        :root {
+            --primary-bg: #e9ecef;
+            --primary-color: #005566;
+            --card-bg: #ffffff;
+            --text-color: #212529;
+        }
+        [data-theme="dark"] {
+            --primary-bg: #212529;
+            --primary-color: #17a2b8;
+            --card-bg: #343a40;
+            --text-color: #e9ecef;
+        }
+        body {
+            background-color: var(--primary-bg);
+            color: var(--text-color);
+            font-family: 'Arial', sans-serif;
+            transition: all 0.3s;
+        }
+        .navbar {
+            background-color: var(--primary-color);
+        }
+        .navbar-brand {
+            font-weight: bold;
+            font-size: 1.5rem;
+        }
+        .hero-section {
+            background: linear-gradient(135deg, #007bff, #005566);
+            color: white;
+            padding: 60px 0;
+            text-align: center;
+            border-radius: 10px;
+            margin-bottom: 30px;
+        }
+        .input-card {
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: var(--card-bg);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            transition: transform 0.3s;
+        }
+        .input-card:hover {
+            transform: translateY(-5px);
+        }
+        .report-card {
+            margin-bottom: 20px;
+            background-color: var(--card-bg);
+            border: none;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            transition: all 0.3s;
+        }
+        .report-card:hover {
+            transform: translateY(-3px);
+        }
+        .card-header {
+            background-color: var(--primary-bg);
+            cursor: pointer;
+            font-weight: bold;
+        }
+        .loading-spinner {
+            display: none;
+        }
+        .loading .loading-spinner {
+            display: block;
+        }
+        .footer {
+            background-color: var(--primary-color);
+            color: white;
+            padding: 20px 0;
+            margin-top: 40px;
+        }
+        .fade-in {
+            animation: fadeIn 1s ease-in;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        .symptom-tag {
+            display: inline-block;
+            background-color: #007bff;
+            color: white;
+            padding: 5px 10px;
+            border-radius: 15px;
+            margin: 5px;
+        }
+        .suggestion-list {
+            position: absolute;
+            z-index: 1000;
+            background-color: var(--card-bg);
+            border: 1px solid #ced4da;
+            max-height: 200px;
+            overflow-y: auto;
+            width: 100%;
+        }
+        .suggestion-item:hover {
+            background-color: #f8f9fa;
+            cursor: pointer;
+        }
+        .input-highlight {
+            border-color: #007bff;
+            box-shadow: 0 0 5px rgba(0,123,255,0.5);
+        }
+    </style>
+</head>
+<body ng-controller="DiagnosisController" data-theme="{{ theme }}">
+    <!-- Header -->
+    <nav class="navbar navbar-expand-lg navbar-dark">
+        <div class="container">
+            <a class="navbar-brand" href="#"><i class="fas fa-stethoscope me-2"></i>Sana Nova Assistant</a>
+            <button class="btn btn-outline-light ms-auto" ng-click="toggleTheme()">
+                <i class="fas" ng-class="theme === 'light' ? 'fa-moon' : 'fa-sun'"></i> {{ theme === 'light' ? 'Dark Mode' : 'Light Mode' }}
+            </button>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <div class="hero-section">
+        <div class="container">
+            <h1>Advanced Medical Diagnosis Assistant</h1>
+            <p class="lead">Enter symptoms by typing (comma-separated) or selecting from suggestions.</p>
+            <div class="input-card card">
+                <div class="card-body">
+                    <div class="mb-3 position-relative">
+                        <label for="symptomInput" class="form-label">Symptoms (type with commas or select)</label>
+                        <input type="text" class="form-control" id="symptomInput" ng-model="currentSymptom" 
+                               ng-keyup="handleInput($event)" ng-class="{ 'input-highlight': currentSymptom.includes(',') }" 
+                               placeholder="e.g., fever, cough or select from dropdown">
+                        <ul class="suggestion-list" ng-if="suggestions.length > 0 && showSuggestions">
+                            <li class="suggestion-item p-2" ng-repeat="suggestion in suggestions" ng-click="addSymptom(suggestion)">{{ suggestion }}</li>
+                        </ul>
+                    </div>
+                    <div class="mb-3">
+                        <span class="symptom-tag" ng-repeat="symptom in selectedSymptoms">{{ symptom }} <i class="fas fa-times ms-1" ng-click="removeSymptom($index)"></i></span>
+                    </div>
+                    <button class="btn btn-light" ng-click="diagnose()" ng-disabled="loading || !selectedSymptoms.length">
+                        <i class="fas fa-diagnoses me-2"></i>Diagnose
+                    </button>
+                    <div class="mt-3" ng-if="history.length > 0">
+                        <label class="form-label">Recent Searches</label>
+                        <select class="form-select" ng-model="selectedHistory" ng-change="loadHistory()">
+                            <option value="">Select a previous search</option>
+                            <option ng-repeat="item in history" value="{{$index}}">{{ item }}</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="container">
+        <!-- Loading Spinner -->
+        <div class="text-center loading-spinner" ng-class="{ 'loading': loading }">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+        </div>
+
+        <!-- Error Message -->
+        <div class="alert alert-danger fade-in" ng-if="error" role="alert">
+            <i class="fas fa-exclamation-triangle me-2"></i>{{ error }}
+        </div>
+
+        <!-- Diagnosis Report -->
+        <div ng-if="report.length > 0" class="fade-in">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2>Diagnosis Report</h2>
+                <button class="btn btn-outline-primary" ng-click="exportReport()">
+                    <i class="fas fa-download me-2"></i>Export Report
+                </button>
+            </div>
+            <div ng-repeat="disease in report" class="report-card card">
+                <div class="card-header" data-bs-toggle="collapse" data-bs-target="#collapse-{{ $index }}">
+                    <i class="fas fa-disease me-2"></i>{{ disease.disease }}
+                </div>
+                <div id="collapse-{{ $index }}" class="collapse show">
+                    <div class="card-body">
+                        <p><strong><i class="fas fa-capsules me-2"></i>Common Drug:</strong> {{ disease.drug }}</p>
+                        <p><strong><i class="fas fa-vial me-2"></i>Recommended Tests:</strong></p>
+                        <ul>
+                            <li ng-repeat="test in disease.tests">{{ test }}</li>
+                        </ul>
+                        <p><strong><i class="fas fa-info-circle me-2"></i>Reason:</strong> {{ disease.reason }}</p>
+                        <button class="btn btn-sm btn-outline-secondary" ng-click="copyToClipboard(disease)">
+                            <i class="fas fa-copy me-2"></i>Copy Details
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="footer text-center">
+        <div class="container">
+            <p>© 2025 Medical Diagnosis Assistant. Powered by xAI. For informational purposes only.</p>
+        </div>
+    </footer>
+
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        angular.module('DiagnosisApp', [])
+        .controller('DiagnosisController', function($scope, $http) {
+            $scope.currentSymptom = '';
+            $scope.selectedSymptoms = [];
+            $scope.suggestions = [];
+            $scope.showSuggestions = true;
+            $scope.report = [];
+            $scope.error = '';
+            $scope.loading = false;
+            $scope.theme = localStorage.getItem('theme') || 'light';
+            $scope.history = JSON.parse(localStorage.getItem('symptomHistory') || '[]');
+            $scope.selectedHistory = '';
+
+            // Common symptoms for autocomplete
+            $scope.commonSymptoms = [
+                'fever', 'cough', 'headache', 'fatigue', 'sore throat', 'nausea', 
+                'shortness of breath', 'chest pain', 'dizziness', 'rash', 'abdominal pain', 'diarrhea'
+            ];
+
+            // Handle input (typing and comma detection)
+            $scope.handleInput = function(event) {
+                if ($scope.currentSymptom.includes(',')) {
+                    let symptoms = $scope.currentSymptom.split(',').map(s => s.trim()).filter(s => s);
+                    symptoms.forEach(function(symptom) {
+                        if (!$scope.selectedSymptoms.includes(symptom)) {
+                            $scope.selectedSymptoms.push(symptom);
+                        }
+                    });
+                    $scope.currentSymptom = '';
+                    $scope.suggestions = [];
+                    $scope.showSuggestions = false;
+                } else {
+                    $scope.showSuggestions = true;
+                    $scope.filterSuggestions();
+                }
+            };
+
+            // Filter suggestions for autocomplete
+            $scope.filterSuggestions = function() {
+                $scope.suggestions = $scope.commonSymptoms.filter(function(symptom) {
+                    return symptom.toLowerCase().includes($scope.currentSymptom.toLowerCase()) &&
+                           !$scope.selectedSymptoms.includes(symptom);
+                });
+            };
+
+            // Add symptom from dropdown
+            $scope.addSymptom = function(symptom) {
+                if (!$scope.selectedSymptoms.includes(symptom)) {
+                    $scope.selectedSymptoms.push(symptom);
+                }
+                $scope.currentSymptom = '';
+                $scope.suggestions = [];
+                $scope.showSuggestions = false;
+            };
+
+            // Remove symptom from selected list
+            $scope.removeSymptom = function(index) {
+                $scope.selectedSymptoms.splice(index, 1);
+            };
+
+            // Load symptom history
+            $scope.loadHistory = function() {
+                if ($scope.selectedHistory !== '') {
+                    $scope.selectedSymptoms = $scope.history[$scope.selectedHistory].split(',').map(s => s.trim());
+                    $scope.currentSymptom = '';
+                    $scope.diagnose();
+                }
+            };
+
+            // Toggle theme
+            $scope.toggleTheme = function() {
+                $scope.theme = $scope.theme === 'light' ? 'dark' : 'light';
+                localStorage.setItem('theme', $scope.theme);
+                document.body.setAttribute('data-theme', $scope.theme);
+            };
+
+            // Diagnose function
+            $scope.diagnose = function() {
+                $scope.error = '';
+                $scope.report = [];
+                $scope.loading = true;
+
+                const symptomsString = $scope.selectedSymptoms.join(', ');
+                $http.post('http://localhost:5000/diagnose', { symptoms: symptomsString })
+                    .then(function(response) {
+                        $scope.loading = false;
+                        if (response.data.success) {
+                            $scope.report = response.data.report;
+                            // Save to history
+                            if (symptomsString && !$scope.history.includes(symptomsString)) {
+                                $scope.history.unshift(symptomsString);
+                                if ($scope.history.length > 5) $scope.history.pop();
+                                localStorage.setItem('symptomHistory', JSON.stringify($scope.history));
+                            }
+                        } else {
+                            $scope.error = response.data.error || 'An error occurred';
+                        }
+                    }, function(error) {
+                        $scope.loading = false;
+                        $scope.error = 'Failed to connect to the server: ' + error.statusText;
+                    });
+            };
+
+            // Export report as text file
+            $scope.exportReport = function() {
+                let text = 'Medical Diagnosis Report\n\n';
+                $scope.report.forEach(function(disease) {
+                    text += `${disease.disease}\n`;
+                    text += `  Common Drug: ${disease.drug}\n`;
+                    text += `  Recommended Tests:\n`;
+                    disease.tests.forEach(function(test) {
+                        text += `    - ${test}\n`;
+                    });
+                    text += `  Reason: ${disease.reason}\n\n`;
+                });
+                const blob = new Blob([text], { type: 'text/plain' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'diagnosis_report.txt';
+                a.click();
+                URL.revokeObjectURL(url);
+            };
+
+            // Copy disease details to clipboard
+            $scope.copyToClipboard = function(disease) {
+                const text = `${disease.disease}\nCommon Drug: ${disease.drug}\nRecommended Tests:\n` +
+                             disease.tests.map(test => `  - ${test}`).join('\n') +
+                             `\nReason: ${disease.reason}`;
+                navigator.clipboard.writeText(text).then(function() {
+                    alert('Copied to clipboard!');
+                }, function() {
+                    $scope.error = 'Failed to copy to clipboard';
+                    $scope.$apply();
+                });
+            };
+
+            // Initialize theme
+            document.body.setAttribute('data-theme', $scope.theme);
+        });
+    </script>
+</body>
+</html>
